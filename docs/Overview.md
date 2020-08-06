@@ -41,6 +41,8 @@ communication with the Klipper developers.
 - [Skew correction](skew_correction.md): Adjustments for axes not
   perfectly square.
 - [G-Codes](G-Codes.md): Information on commands supported by Klipper.
+- [Advanced tuning](Advanced_Tuning.md): Hints on tuning some common
+  configuration parameters.
 
 # Developer Documentation
 
