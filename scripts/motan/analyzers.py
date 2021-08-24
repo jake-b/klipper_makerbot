@@ -46,6 +46,57 @@ class GenDerivative:
         return [deriv[0]] + deriv
 AHandlers["derivative"] = GenDerivative
 
+# Calculate an integral (accel to velocity, or velocity to position)
+class GenIntegral:
+    ParametersMin = 1
+    ParametersMax = 2
+    DataSets = [
+        ('integral(<dataset>)', 'Integral of the given dataset'),
+        ('integral(<dataset1>,<dataset2>)',
+         'Integral with dataset2 as reference'),
+    ]
+    def __init__(self, amanager, name_parts):
+        self.amanager = amanager
+        self.source = name_parts[1]
+        amanager.setup_dataset(self.source)
+        self.ref = None
+        if len(name_parts) == 3:
+            self.ref = name_parts[2]
+            amanager.setup_dataset(self.ref)
+    def get_label(self):
+        label = self.amanager.get_label(self.source)
+        lname = label['label']
+        units = label['units']
+        if '(mm/s)' in units:
+            rep = [('Velocity', 'Position'), ('(mm/s)', '(mm)')]
+        elif '(mm/s^2)' in units:
+            rep = [('Acceleration', 'Velocity'), ('(mm/s^2)', '(mm/s)')]
+        else:
+            return {'label': 'Integral', 'units': 'Unknown'}
+        for old, new in rep:
+            lname = lname.replace(old, new).replace(old.lower(), new.lower())
+            units = units.replace(old, new).replace(old.lower(), new.lower())
+        return {'label': lname, 'units': units}
+    def generate_data(self):
+        seg_time = self.amanager.get_segment_time()
+        src = self.amanager.get_datasets()[self.source]
+        offset = sum(src) / len(src)
+        total = 0.
+        ref = None
+        if self.ref is not None:
+            ref = self.amanager.get_datasets()[self.ref]
+            offset -= (ref[-1] - ref[0]) / (len(src) * seg_time)
+            total = ref[0]
+            ref_weight = 0.010 # XXX - impact varies by seg_time
+        data = [0.] * len(src)
+        for i, v in enumerate(src):
+            total += (v - offset) * seg_time
+            if ref is not None:
+                total = (1. - ref_weight) * total + ref_weight * ref[i]
+            data[i] = total
+        return data
+AHandlers["integral"] = GenIntegral
+
 # Calculate a kinematic stepper position from the toolhead requested position
 class GenKinematicPosition:
     ParametersMin = ParametersMax = 1
