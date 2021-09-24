@@ -14,9 +14,10 @@
 #include "spicmds.h" // spidev_transfer
 
 enum {
-    TS_CHIP_MAX31855, TS_CHIP_MAX31856, TS_CHIP_MAX31865, TS_CHIP_MAX6675
+    TS_CHIP_ADS1118, TS_CHIP_MAX31855, TS_CHIP_MAX31856, TS_CHIP_MAX31865, TS_CHIP_MAX6675
 };
 
+DECL_ENUMERATION("thermocouple_type", "ADS1118", TS_CHIP_ADS1118);
 DECL_ENUMERATION("thermocouple_type", "MAX31855", TS_CHIP_MAX31855);
 DECL_ENUMERATION("thermocouple_type", "MAX31856", TS_CHIP_MAX31856);
 DECL_ENUMERATION("thermocouple_type", "MAX31865", TS_CHIP_MAX31865);
@@ -88,8 +89,30 @@ thermocouple_respond(struct thermocouple_spi *spi, uint32_t next_begin_time
     sendf("thermocouple_result oid=%c next_clock=%u value=%u fault=%c",
           oid, next_begin_time, value, fault);
     /* check the result and stop if below or above allowed range */
-    if (value < spi->min_value || value > spi->max_value)
-        try_shutdown("Thermocouple ADC out of range");
+    //if (value < spi->min_value || value > spi->max_value)
+        //try_shutdown("Thermocouple ADC out of range");
+}
+
+static void
+thermocouple_handle_ads1118(struct thermocouple_spi *spi
+                             , uint32_t next_begin_time, uint8_t oid)
+{
+    static uint8_t tester = 0;
+    uint8_t msg[4] = {0b00001100, 0b01100010, 0b00001100, 0b01100010};
+    spidev_transfer(spi->spi, 1, sizeof(msg), msg);
+    uint32_t value;
+    memcpy(&value, msg, sizeof(value));
+    value = (be32_to_cpu(value)) >> 16;
+
+    thermocouple_respond(spi, next_begin_time, value, 0, oid);
+
+    ++tester;
+    sendf("thermocouple_result_test oid=%c next_clock=%u value=%c",
+          oid, next_begin_time, tester);
+
+    // Kill after data send, host decode an error
+    //if (value & 0x04)
+        //try_shutdown("Thermocouple reader fault");
 }
 
 static void
@@ -179,6 +202,9 @@ thermocouple_task(void)
         spi->flags &= ~TS_PENDING;
         irq_enable();
         switch (spi->chip_type) {
+        case TS_CHIP_ADS1118:
+            thermocouple_handle_ads1118(spi, next_begin_time, oid);
+            break;
         case TS_CHIP_MAX31855:
             thermocouple_handle_max31855(spi, next_begin_time, oid);
             break;
