@@ -542,7 +542,7 @@ class MCU:
                     or self._serialport.startswith("/tmp/klipper_host_")):
                 self._baud = config.getint('baud', 250000, minval=2400)
         # Restarts
-        restart_methods = [None, 'arduino', 'cheetah', 'command', 'rpi_usb']
+        restart_methods = [None, 'stk500v1', 'arduino', 'cheetah', 'command', 'rpi_usb']
         self._restart_method = 'command'
         if self._baud:
             rmethods = {m: m for m in restart_methods}
@@ -867,6 +867,10 @@ class MCU:
             or (self._is_shutdown and not force)):
             return
         self._emergency_stop_cmd.send()
+    def _restart_stk500v1(self):
+        logging.info("Attempting MCU '%s' reset", self._name)
+        self._disconnect()
+        serialhdl.stk500v1_reset(self._serialport, self._reactor)       
     def _restart_arduino(self):
         logging.info("Attempting MCU '%s' reset", self._name)
         self._disconnect()
@@ -907,6 +911,8 @@ class MCU:
             self._restart_via_command()
         elif self._restart_method == 'cheetah':
             self._restart_cheetah()
+        elif self._restart_method == 'stk500v1':
+            self._restart_stk500v1()            
         else:
             self._restart_arduino()
     # Misc external commands
