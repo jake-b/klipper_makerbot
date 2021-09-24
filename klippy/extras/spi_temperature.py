@@ -4,6 +4,7 @@
 # Copyright (C) 2018  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import logging
 import math
 from . import bus
 
@@ -323,6 +324,29 @@ class MAX31865(SensorBase):
         cmd = 0x80 + MAX31865_CONFIG_REG
         return [cmd, value]
 
+######################################################################
+# ADS1118
+######################################################################
+
+class ADS1118(SensorBase):
+    def __init__(self, config):
+        SensorBase.__init__(self, config, "ADS1118", self.build_spi_init(config), spi_mode=1)
+    def calc_temp(self, adc, fault):
+        logging.debug("calc temp called")
+        logging.debug("adc %u", adc)
+        # Fix sign bit:
+        if adc & 0x8000:
+            adc = adc - (1 << 16)
+        reading = adc
+        logging.debug("reading %u", reading)
+        temp = (((reading) * .0078125) + 1) / .040647
+        logging.debug("temp = %.2f", temp)
+        return temp
+    def calc_adc(self, temp):
+        adc = (temp * .0000078125) * .040647
+        return adc
+    def build_spi_init(self, config):
+        return [0b00001100, 0b01100010]
 
 ######################################################################
 # Sensor registration
@@ -333,6 +357,7 @@ Sensors = {
     "MAX31855": MAX31855,
     "MAX31856": MAX31856,
     "MAX31865": MAX31865,
+    "ADS1118": ADS1118,
 }
 
 def load_config(config):
