@@ -190,7 +190,8 @@ class SerialReader:
                              self.warn_prefix, e)
                 self.reactor.pause(self.reactor.monotonic() + 5.)
                 continue
-            stk500v2_leave(serial_dev, self.reactor)
+            #todo - only skip if stk500v1
+            #stk500v2_leave(serial_dev, self.reactor)
             ret = self._start_session(serial_dev)
             if ret:
                 break
@@ -367,6 +368,15 @@ def cheetah_reset(serialport, reactor):
     ser.dtr = True
     reactor.pause(reactor.monotonic() + 0.100)
     ser.dtr = False
+    reactor.pause(reactor.monotonic() + 0.100)
+    ser.close()
+
+# Attempt an stk500v1 style reset on a serial port
+# used by the mightyboard rev g and h
+def stk500v1_reset(serialport, reactor):
+    # First try opening the port at a different baud
+    ser = serial.Serial(serialport, 57600, timeout=0, exclusive=True)
+    ser.read(1)
     reactor.pause(reactor.monotonic() + 0.100)
     ser.close()
 

@@ -107,6 +107,15 @@ config INITIAL_PINS
         pins will be set to output high - preface a pin with a '!'
         character to set that pin to output low.
 
+config BOOTLOADER
+    string "Bootloader installed on MCU"
+    depends on LOW_LEVEL_OPTIONS
+    help
+        for mightboard rev g and rev h use stk500v1 unless you have 
+        flashed a different bootloader.  This bootloader resets 
+        the mcu when 57600 baud connections are made, allowing the
+        firmware to be flashed.
+
 # The HAVE_x options allow boards to disable support for some commands
 # if the hardware does not support the feature.
 config HAVE_GPIO
