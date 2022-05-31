@@ -13,6 +13,8 @@
 #include "sched.h" // DECL_TASK
 #include "spicmds.h" // spidev_transfer
 
+uint32_t thermocoupleConvertWithCJCompensation(uint32_t microvoltsMeasured, uint32_t ambient);
+
 enum {
     TS_CHIP_ADS1118, TS_CHIP_MAX31855, TS_CHIP_MAX31856, TS_CHIP_MAX31865, TS_CHIP_MAX6675
 };
@@ -28,8 +30,9 @@ struct thermocouple_spi {
     uint32_t rest_time;
     uint32_t min_value;           // Min allowed ADC value
     uint32_t max_value;           // Max allowed ADC value
+    uint32_t cold_junction;
     struct spidev_s *spi;
-    uint8_t chip_type, flags;
+    uint8_t chip_type, flags, state;
 };
 
 enum {
@@ -94,21 +97,70 @@ thermocouple_respond(struct thermocouple_spi *spi, uint32_t next_begin_time
 }
 
 static void
+thermocouple_respond_ads1118(struct thermocouple_spi *spi, uint32_t next_begin_time
+                     , uint32_t value, uint32_t value2, uint8_t fault, uint8_t oid)
+{
+    sendf("thermocouple_result_ads1118 oid=%c next_clock=%u value=%u value2=%u fault=%c",
+          oid, next_begin_time, value, value2, fault);
+    /* check the result and stop if below or above allowed range */
+    //if (value < spi->min_value || value > spi->max_value)
+        //try_shutdown("Thermocouple ADC out of range");
+}
+
+static void
 thermocouple_handle_ads1118(struct thermocouple_spi *spi
                              , uint32_t next_begin_time, uint8_t oid)
 {
-    static uint8_t tester = 0;
-    uint8_t msg[4] = {0b00001100, 0b01100010, 0b00001100, 0b01100010};
+    // dout goes low if data is ready to read.
+    // only read the temperature on every N cycles (10x less than that others)
+    // only read 2nd thermocouple if configured
+    // when initializing, detect if other oids with same chip are configured
+    // store all three setting in the spi record, send therm1 and therm2 values
+    // only upon successful read
+    uint8_t msg[4];
+    if (spi->state <= 1) {
+        msg[0] = 0b10111101;
+        msg[1] = 0b01100010;
+        msg[2] = msg[0];
+        msg[3] = msg[1];
+        spi->state = 2;
+    } else if (spi->state == 2) {
+        msg[0] = 0b10001101;
+        msg[1] = 0b01110010;
+        msg[2] = msg[0];
+        msg[3] = msg[1];
+        spi->state = 3;
+    } else if (spi->state == 3) {
+        msg[0] = 0b10001101;
+        msg[1] = 0b01100010;
+        msg[2] = msg[0];
+        msg[3] = msg[1];
+        spi->state = 1;
+    }
+
     spidev_transfer(spi->spi, 1, sizeof(msg), msg);
     uint32_t value;
     memcpy(&value, msg, sizeof(value));
-    value = (be32_to_cpu(value)) >> 16;
+    value = be32_to_cpu(value) >> 16;
 
-    thermocouple_respond(spi, next_begin_time, value, 0, oid);
+    if (spi->state == 1) {
+        uint32_t value1 = value >> 2;
+        spi->cold_junction = value1;
+    }
+    if (spi->state == 2) {
+        //sendf("thermocouple_result_1 oid=%c next_clock=%u value=%u state=%c", oid, next_begin_time, result, spi->state);
 
-    ++tester;
-    sendf("thermocouple_result_test oid=%c next_clock=%u value=%c",
-          oid, next_begin_time, tester);
+        // need to know if the cold_junction value has been read
+        // error condition if we don't have a recent reading
+        thermocouple_respond_ads1118(spi, next_begin_time, value, spi->cold_junction, 0, oid);
+    }
+    if (spi->state == 3) {
+        sendf("thermocouple_result_2 oid=%c next_clock=%u value=%u state=%c", oid, next_begin_time, value, spi->state);
+
+        //can't send this until we figure out how to set multiple oids
+        //thermocouple_respond_ads1118(spi, next_begin_time, result, 0, oid);
+    }
+
 
     // Kill after data send, host decode an error
     //if (value & 0x04)
