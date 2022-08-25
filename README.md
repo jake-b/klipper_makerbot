@@ -1,3 +1,5 @@
+This repository (https://github.com/jake-b/klipper_makerbot.git) is a detached fork of 
+dockterj:master.  It contains additional changes to support the Makerbot Replicator 2/2X.
 Welcome to the Klipper project!
 
 [![Klipper](docs/img/klipper-logo-small.png)](https://www.klipper3d.org/)
